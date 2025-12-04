@@ -1,0 +1,7 @@
+streamlit==1.32.0
+tensorflow-cpu==2.13.0
+numpy==1.26.4
+Pillow==10.0.0
+matplotlib==3.7.1
+opencv-python-headless==4.8.0.74
+reportlab==4.0.4
