@@ -1,18 +1,18 @@
 #############################################
 #   COFFEE ROAST RECOGNITION — FINAL APP
-#   With Camera Input, Feature Viz & PDF
+#   TFLite Version (No TensorFlow)
 #############################################
 
 import streamlit as st
 from PIL import Image
 import numpy as np
-import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2
 import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
+import tflite_runtime.interpreter as tflite
 
 
 # ======================
@@ -55,24 +55,31 @@ descriptions = {
 
 
 # ======================
-# LOAD MODEL
+# LOAD TFLITE MODEL
 # ======================
 @st.cache_resource
-def load_model():
-    return tf.keras.models.load_model("model/efficientnet_B1.keras")
+def load_interpreter():
+    interpreter = tflite.Interpreter(model_path="model/efficientnet_B1.tflite")
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    return interpreter, input_details, output_details
 
-model = load_model()
+interpreter, input_details, output_details = load_interpreter()
 IMG_SIZE = 240
 
 
 # ======================
 # PREPROCESS
+# (EfficientNet style: scale to [-1, 1])
 # ======================
 def preprocess(img):
     img = img.resize((IMG_SIZE, IMG_SIZE))
-    img = np.array(img)
-    img = tf.keras.applications.efficientnet.preprocess_input(img)
-    return np.expand_dims(img, axis=0)
+    x = np.array(img).astype("float32")
+    x = x / 255.0
+    x = (x - 0.5) * 2.0  # [-1, 1], mirip preprocess_input EfficientNet
+    x = np.expand_dims(x, axis=0)
+    return x
 
 
 
@@ -201,7 +208,7 @@ with st.sidebar:
     - 🟧 Light  
     - 🟤 Medium  
 
-    **Model:** EfficientNet-B1  
+    **Model:** EfficientNet-B1 (TFLite)  
     **Dataset:** 1600 images  
     """)
 
@@ -257,7 +264,11 @@ if uploaded_file or camera_photo:
 
     with right:
         input_tensor = preprocess(img)
-        probs = model.predict(input_tensor)[0]
+
+        # TFLite inference
+        interpreter.set_tensor(input_details[0]['index'], input_tensor.astype("float32"))
+        interpreter.invoke()
+        probs = interpreter.get_tensor(output_details[0]['index'])[0]
 
         pred_idx = int(np.argmax(probs))
         pred_label = labels[pred_idx]
@@ -335,6 +346,6 @@ if uploaded_file or camera_photo:
 st.markdown("---")
 st.markdown("""
 <p style='text-align:center; color:#8d6e63;'>
-    ☕ Built with EfficientNet • Streamlit • Machine Learning
+    ☕ Built with EfficientNet (TFLite) • Streamlit • Machine Learning
 </p>
 """, unsafe_allow_html=True)
